@@ -1,0 +1,79 @@
+version: '3.5'
+
+
+volumes:
+  media:
+  db_main:
+  db_rocket:
+
+
+services:
+  nginx:
+    restart: always
+    image: ${ORGANIZATION:-ejplatform}/nginx:${VERSION:-latest}
+    volumes:
+      - media:/usr/share/nginx/html/media
+    ports:
+      - 80:80
+    links:
+      - web:django
+
+  web:
+    restart: always
+    image: ${ORGANIZATION:-ejplatform}/web:${VERSION:-latest}
+    ports:
+      - "5000:8000"
+    links:
+      - postgres:postgres
+      - redis:redis
+      - rocketchat:rocketchat
+    env_file:
+      - ./config.env
+      - ./postgres.env
+    environment:
+      - HOSTNAME=${HOSTNAME:-}
+      - DJANGO_ENVIRONMENT=production
+    volumes:
+      - media:/app/local/media/
+    working_dir: /app
+    command: db -m run-deploy
+
+  postgres:
+    restart: always
+    image: postgres:${POSTGRES_VERSION:-10.4}
+    env_file:
+      - ./postgres.env
+    volumes:
+      - db_main:/var/lib/postgresql/data
+
+  redis:
+    restart: always
+    image: redis:${REDIS_VERSION:-4.0.11}
+
+
+  #-----------------------------------------------------------------------------
+  # ROCKET CHAT
+  #
+  # Uncomment those lines to enable the appropriate services.
+  # If you don't want to use RocketChat, please remove this section.
+  #-----------------------------------------------------------------------------
+  rocketchat:
+    image: rocketchat/rocket.chat:${ROCKETCHAT_VERSION:-latest}
+    environment:
+      MONGO_URL: mongodb://mongo:27017/rocketchat
+      PORT: '3000'
+      ROOT_URL: http://talks.${HOSTNAME:-localhost}
+    links:
+      - mongo:mongo
+    ports:
+      - 3000:3000
+
+  mongo:
+    image: mongo:${MONGO_VERSION:-latest}
+    volumes:
+      - db_rocket:/data/db
+    command:
+      - mongod
+      - --smallfiles
+      - --oplogSize
+      - '128'
